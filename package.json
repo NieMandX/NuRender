@@ -1,0 +1,25 @@
+{
+  "name": "nurender",
+  "private": true,
+  "version": "0.12.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "analyse": "node --import tsx scripts/analyse-repetitions.ts",
+    "build:pages": "tsc --noEmit && vite build --mode pages",
+    "preview:pages": "vite preview --host 127.0.0.1 --port 5175",
+    "test:unit": "NUR_ASSET_TESTS=0 node --import tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "meshoptimizer": "^1.3.0",
+    "wgpu-matrix": "^3.4.0"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.64",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  }
+}

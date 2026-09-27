@@ -1,0 +1,15 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+__pycache__/
+*.pyc
+
+# Models are versioned in Object Storage, not GitHub source/Pages artifacts.
+public/scenes/
+public/environments/
+.env.local
+.env.*.local
+# Private recovered conversation and design working files stay local.
+structured_renderer_codex_context_recovered.md
+design/
