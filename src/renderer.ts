@@ -1,4 +1,5 @@
 import {frustumPlanes} from './frustum';
+import {NavigationCamera,CAMERA_FOV} from './navigation-camera';
 import {chooseProfile,renderSize} from './device-profile';
 import {PrefilteredIBL} from './prefiltered-ibl';
 import {FullScene,FULL_ROOT,MOBILE_ROOT} from './full-scene';
@@ -27,7 +28,10 @@ export class Renderer {
   private environment!:HDREnvironment;
   private textureLayout!:GPUBindGroupLayout;private fallbackTextures!:TextureAssets;private realTextures?:TextureAssets;
   mode: Mode = 'A'; detail: Detail = 'full'; count = 64; types = 4;
-  yaw = .72; pitch = .68; distance = 245;
+  readonly camera=new NavigationCamera();
+  get yaw(){return this.camera.yaw;} set yaw(value:number){this.camera.yaw=value;}
+  get pitch(){return this.camera.pitch;} set pitch(value:number){this.camera.pitch=value;}
+  get distance(){return this.camera.distance;} set distance(value:number){this.camera.distance=value;}
   device!: GPUDevice; context!: GPUCanvasContext; adapterInfo: unknown;
   hasTimestamps = false; stopped = false;
   renderedFrames = 0;
@@ -205,7 +209,7 @@ export class Renderer {
   async loadAnalysis(){if(!this.real)throw new Error('Загрузите Blender');return this.real.loadAnalysis();}
   setDiagnostic(id:number){if(this.source==='blender')this.real?.setDiagnostic(id);}
   private focusBounds:number[][]|null=null;
-  focusFamily(id:number){const f=this.materialFamilies?.find(f=>f.id===id);if(!f)return;this.focusBounds=f.bounds;this.yaw=Math.PI;this.pitch=.24;this.distance=Math.max(25,this.framing.radius*3);}
+  focusFamily(id:number){const f=this.materialFamilies?.find(f=>f.id===id);if(!f)return;this.focusBounds=f.bounds;this.camera.resetOffset();this.yaw=Math.PI;this.pitch=.24;this.distance=Math.max(25,this.framing.radius*3);}
   get activeModes():Mode[]{return MODES;}
   get sourceInfo(){return this.source!=='procedural'?this.activeReal?.manifest:null;}
   private get framing(){
@@ -213,7 +217,8 @@ export class Renderer {
     return {target:[0,9,0],radius:Math.ceil(Math.sqrt(this.count))*16+25};
   }
   get cameraFraming(){return this.framing;}
-  resetCamera(){this.focusBounds=null;this.yaw=.72;this.pitch=.68;this.distance=this.source!=='procedural'?this.framing.radius*3:Math.sqrt(this.count)*42;}
+  resetCamera(){this.focusBounds=null;this.camera.resetOffset();this.yaw=.72;this.pitch=.68;this.distance=this.source!=='procedural'?this.framing.radius*3:Math.sqrt(this.count)*42;}
+  get cameraPose(){return this.camera.pose(this.framing,this.canvas.clientWidth/Math.max(1,this.canvas.clientHeight));}
   get shadowCacheInfo(){return {policy:'static',builds:this.shadowBuilds,reuses:this.shadowReuses,lastFrameRebuilt:this.lastShadowRebuilt};}
   get metrics() {
     const shared=this.vertex.size+this.index.size+this.g.size+this.dummy.size;
@@ -261,12 +266,13 @@ export class Renderer {
     this.renderedFrames++;
     const start=performance.now();this.resize();
     const aspect=this.size[0]/this.size[1];
-    const fittedDistance=this.distance*Math.max(1,1.2/aspect);
-    const {target,radius}=this.framing;
-    const eye=[Math.sin(this.yaw)*Math.cos(this.pitch)*fittedDistance,Math.sin(this.pitch)*fittedDistance,Math.cos(this.yaw)*Math.cos(this.pitch)*fittedDistance].map((v,i)=>v+target[i]);
-    const vp=mat4.multiply(mat4.perspective(.65,aspect,.5,10000),mat4.lookAt(eye,target,[0,1,0]));
+    const framing=this.framing,{target:lightTarget,radius}=framing;
+    const {eye,target}=this.camera.pose(framing,aspect);
+    const far=Math.max(10000,Math.hypot(...eye.map((v,i)=>v-lightTarget[i]))+radius*3);
+    const near=Math.max(.1,Math.min(.5,this.distance*.005));
+    const vp=mat4.multiply(mat4.perspective(CAMERA_FOV,aspect,near,far),mat4.lookAt(eye,target,[0,1,0]));
     if(this.source==='full'){const planes=frustumPlanes(vp);this.full?.prepareVisibility(this.culling?planes:null);this.full?.prepareDetail(eye,target,this.size[1],planes);}
-    const lightVP=mat4.multiply(mat4.ortho(-radius,radius,-radius,radius,1,radius*6),mat4.lookAt([-radius*1.8,radius*3,radius*1.2].map((v,i)=>v+target[i]),target,[0,1,0]));
+    const lightVP=mat4.multiply(mat4.ortho(-radius,radius,-radius,radius,1,radius*6),mat4.lookAt([-radius*1.8,radius*3,radius*1.2].map((v,i)=>v+lightTarget[i]),lightTarget,[0,1,0]));
     const uniforms=new Float32Array(44);uniforms.set(vp);uniforms.set(lightVP,16);uniforms.set([...eye,this.environmentRotation*Math.PI/180],32);uniforms.set([this.partCount,this.diagnostic,this.source!=='procedural'?this.textureMode:0,this.source!=='procedural'?this.environmentMode:0],36);
     uniforms.set([this.iblMode,0,0,0],40);
     this.device.queue.writeBuffer(this.uniform,0,uniforms);
