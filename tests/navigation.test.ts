@@ -69,8 +69,19 @@ test('input focus, release, cancellation, modifiers and two-finger gestures',()=
     close([camera.yaw,camera.pitch],angles);assert.notDeepEqual(camera.offset,before);assert.ok(Math.abs(camera.distance-245)<1e-7);
     pointer('pointercancel',1,110,120);controls.stop();assert.equal(canvas.captures.size,0);
     controls.wheelMode='trackpad';const distance=camera.distance,offset=[...camera.offset];
-    send(canvas,'wheel',{deltaX:30,deltaY:20,deltaMode:0,ctrlKey:false});assert.equal(camera.distance,distance);assert.notDeepEqual(camera.offset,offset);
+    send(canvas,'wheel',{deltaX:30,deltaY:20,deltaMode:0,ctrlKey:false});assert.ok(camera.distance>distance);close(camera.offset,offset);
     send(canvas,'wheel',{deltaX:0,deltaY:-10,deltaMode:0,ctrlKey:true});assert.ok(camera.distance<distance);
+    const panDistance=camera.distance;
+    pointer('pointerdown',3,100,100,2,'mouse');pointer('pointermove',3,160,125,2,'mouse');pointer('pointerup',3,160,125,2,'mouse');
+    assert.notDeepEqual(camera.offset,offset);close([camera.yaw,camera.pitch],angles);assert.equal(camera.distance,panDistance);
+    controls.wheelMode='mouse';const mouseOffset=[...camera.offset];
+    send(canvas,'wheel',{deltaX:0,deltaY:-100,deltaMode:0,ctrlKey:false});assert.ok(camera.distance<panDistance);close(camera.offset,mouseOffset);
+    const mouseDistance=camera.distance;
+    pointer('pointerdown',4,100,100,1,'mouse');pointer('pointermove',4,180,140,1,'mouse');pointer('pointerup',4,180,140,1,'mouse');
+    assert.notDeepEqual(camera.offset,mouseOffset);close([camera.yaw,camera.pitch],angles);assert.equal(camera.distance,mouseDistance);
+    const eye=camera.pose(framing,12/7).eye;
+    pointer('pointerdown',5,100,100,2,'mouse');pointer('pointermove',5,140,120,2,'mouse');pointer('pointerup',5,140,120,2,'mouse');
+    close(camera.pose(framing,12/7).eye,eye);assert.notDeepEqual([camera.yaw,camera.pitch],angles);assert.equal(canvas.captures.size,0);
     const count=changes;controls.destroy();down('KeyW');assert.equal(changes,count);assert.equal(controls.moving,false);
   }finally{
     controls.destroy();if(oldWindow)Object.defineProperty(globalThis,'window',oldWindow);else Reflect.deleteProperty(globalThis,'window');

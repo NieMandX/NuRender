@@ -27,7 +27,8 @@ export class NavigationControls {
         if(before.distance>1&&after.distance>1)this.camera.zoom(before.distance/after.distance,this.framing().radius);
       }else if(this.pointers.size===1){
         const dx=e.clientX-old.x,dy=e.clientY-old.y;
-        if(old.button===1||(old.button===0&&e.shiftKey))this.camera.pan(dx,dy,canvas.clientWidth,canvas.clientHeight);
+        // A two-finger trackpad click is reported as the secondary mouse button.
+        if(old.button===1||(old.button===2&&this.wheelMode==='trackpad')||(old.button===0&&e.shiftKey))this.camera.pan(dx,dy,canvas.clientWidth,canvas.clientHeight);
         else if(old.button===2)this.camera.look(dx,dy,canvas.clientWidth/Math.max(1,canvas.clientHeight));
         else this.camera.orbit(dx,dy);
       }else return;
@@ -42,7 +43,7 @@ export class NavigationControls {
       if(!this.enabled())return;e.preventDefault();
       if(this.gestureScale!==null)return;
       const unit=e.deltaMode===1?16:e.deltaMode===2?canvas.clientHeight:1,dx=e.deltaX*unit,dy=e.deltaY*unit;
-      if(e.ctrlKey||this.wheelMode==='mouse'&&!e.shiftKey)this.camera.zoom(Math.exp(Math.max(-2,Math.min(2,dy*(e.ctrlKey ? .01 : .001)))),this.framing().radius);
+      if(e.ctrlKey||!e.shiftKey)this.camera.zoom(Math.exp(Math.max(-2,Math.min(2,dy*(e.ctrlKey ? .01 : .001)))),this.framing().radius);
       else this.camera.pan(-dx,-dy,canvas.clientWidth,canvas.clientHeight);
       this.changed();
     },{signal,passive:false});
