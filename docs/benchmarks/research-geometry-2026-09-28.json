@@ -1,0 +1,425 @@
+{
+  "date": "2026-09-28",
+  "sourceDigest": "5f1a3217dd57b7be8eba42ad152e714b801269005e4308897f2522d9e656e306",
+  "mobileDigest": "0321db133c161b9fc55d25676742c1abf95c48a9aef827745e909f123e871ff9",
+  "meshoptimizer": "1.3.0",
+  "notes": [
+    "Offline hypothesis tests, not a new renderer or implementation of any paper.",
+    "Meshopt error is its combined appearance metric, not a Hausdorff or screen-pixel guarantee.",
+    "UV analysis does not certify normal-map tangent derivatives or rendered quality.",
+    "Chunk windows are samples, not a prediction of whole-scene triangle savings."
+  ],
+  "heavyFamilies": [
+    {
+      "family": 184,
+      "bytes": 120211274
+    },
+    {
+      "family": 201,
+      "bytes": 52427192
+    }
+  ],
+  "chunkExperiment": [
+    {
+      "family": 184,
+      "name": "! Металл темный / ! Металл темный",
+      "parts": [
+        "part-546.vertices.bin",
+        "part-547.vertices.bin",
+        "part-548.vertices.bin",
+        "part-549.vertices.bin",
+        "part-550.vertices.bin",
+        "part-551.vertices.bin",
+        "part-552.vertices.bin",
+        "part-553.vertices.bin"
+      ],
+      "absoluteError": 47.5602392578125,
+      "trianglesBefore": 160000,
+      "separateTriangles": 120831,
+      "mergedTriangles": 120349,
+      "verticesBefore": 333435,
+      "verticesAfterWeld": 331630,
+      "separateMaxError": 47.55342483520508,
+      "mergedError": 47.3066520690918
+    },
+    {
+      "family": 184,
+      "name": "! Металл темный / ! Металл темный",
+      "parts": [
+        "part-664.vertices.bin",
+        "part-665.vertices.bin",
+        "part-666.vertices.bin",
+        "part-667.vertices.bin",
+        "part-668.vertices.bin",
+        "part-669.vertices.bin",
+        "part-670.vertices.bin",
+        "part-671.vertices.bin"
+      ],
+      "absoluteError": 30.96,
+      "trianglesBefore": 160000,
+      "separateTriangles": 100501,
+      "mergedTriangles": 101378,
+      "verticesBefore": 343794,
+      "verticesAfterWeld": 343104,
+      "separateMaxError": 30.945384979248047,
+      "mergedError": 30.34054183959961
+    },
+    {
+      "family": 184,
+      "name": "! Металл темный / ! Металл темный",
+      "parts": [
+        "part-782.vertices.bin",
+        "part-783.vertices.bin",
+        "part-784.vertices.bin",
+        "part-785.vertices.bin",
+        "part-786.vertices.bin",
+        "part-787.vertices.bin",
+        "part-788.vertices.bin",
+        "part-789.vertices.bin"
+      ],
+      "absoluteError": 25.1475,
+      "trianglesBefore": 159593,
+      "separateTriangles": 108175,
+      "mergedTriangles": 109942,
+      "verticesBefore": 322812,
+      "verticesAfterWeld": 321730,
+      "separateMaxError": 25.090742111206055,
+      "mergedError": 24.931013107299805
+    },
+    {
+      "family": 201,
+      "name": "Металл - Темно-серый / Металл - Темно-серый",
+      "parts": [
+        "part-818.vertices.bin",
+        "part-819.vertices.bin",
+        "part-820.vertices.bin",
+        "part-821.vertices.bin",
+        "part-822.vertices.bin",
+        "part-823.vertices.bin",
+        "part-824.vertices.bin",
+        "part-825.vertices.bin"
+      ],
+      "absoluteError": 53.6278759765625,
+      "trianglesBefore": 160000,
+      "separateTriangles": 90918,
+      "mergedTriangles": 88500,
+      "verticesBefore": 372553,
+      "verticesAfterWeld": 371861,
+      "separateMaxError": 53.595115661621094,
+      "mergedError": 53.43643569946289
+    },
+    {
+      "family": 201,
+      "name": "Металл - Темно-серый / Металл - Темно-серый",
+      "parts": [
+        "part-873.vertices.bin",
+        "part-874.vertices.bin",
+        "part-875.vertices.bin",
+        "part-876.vertices.bin",
+        "part-877.vertices.bin",
+        "part-878.vertices.bin",
+        "part-879.vertices.bin",
+        "part-880.vertices.bin"
+      ],
+      "absoluteError": 6.14125,
+      "trianglesBefore": 160000,
+      "separateTriangles": 77027,
+      "mergedTriangles": 68077,
+      "verticesBefore": 406197,
+      "verticesAfterWeld": 405129,
+      "separateMaxError": 6.132933616638184,
+      "mergedError": 6.125891208648682
+    },
+    {
+      "family": 201,
+      "name": "Металл - Темно-серый / Металл - Темно-серый",
+      "parts": [
+        "part-928.vertices.bin",
+        "part-929.vertices.bin",
+        "part-930.vertices.bin",
+        "part-931.vertices.bin",
+        "part-932.vertices.bin",
+        "part-933.vertices.bin",
+        "part-934.vertices.bin",
+        "part-935.vertices.bin"
+      ],
+      "absoluteError": 30.33607421875,
+      "trianglesBefore": 147643,
+      "separateTriangles": 101421,
+      "mergedTriangles": 99843,
+      "verticesBefore": 366743,
+      "verticesAfterWeld": 363789,
+      "separateMaxError": 30.32071876525879,
+      "mergedError": 30.315881729125977
+    },
+    {
+      "family": 178,
+      "name": "Металл - Алюминий Белый / Металл - Алюминий Белый",
+      "parts": [
+        "part-431.vertices.bin",
+        "part-432.vertices.bin",
+        "part-433.vertices.bin",
+        "part-434.vertices.bin",
+        "part-435.vertices.bin",
+        "part-436.vertices.bin",
+        "part-437.vertices.bin",
+        "part-438.vertices.bin"
+      ],
+      "absoluteError": 24.150000000000002,
+      "trianglesBefore": 160000,
+      "separateTriangles": 84519,
+      "mergedTriangles": 86727,
+      "verticesBefore": 367561,
+      "verticesAfterWeld": 366964,
+      "separateMaxError": 24.142864227294922,
+      "mergedError": 23.94842529296875
+    },
+    {
+      "family": 178,
+      "name": "Металл - Алюминий Белый / Металл - Алюминий Белый",
+      "parts": [
+        "part-478.vertices.bin",
+        "part-479.vertices.bin",
+        "part-480.vertices.bin",
+        "part-481.vertices.bin",
+        "part-482.vertices.bin",
+        "part-483.vertices.bin",
+        "part-484.vertices.bin",
+        "part-485.vertices.bin"
+      ],
+      "absoluteError": 18.199423828125,
+      "trianglesBefore": 160000,
+      "separateTriangles": 96140,
+      "mergedTriangles": 92444,
+      "verticesBefore": 360641,
+      "verticesAfterWeld": 360556,
+      "separateMaxError": 18.169586181640625,
+      "mergedError": 18.185762405395508
+    },
+    {
+      "family": 178,
+      "name": "Металл - Алюминий Белый / Металл - Алюминий Белый",
+      "parts": [
+        "part-525.vertices.bin",
+        "part-526.vertices.bin",
+        "part-527.vertices.bin",
+        "part-528.vertices.bin",
+        "part-529.vertices.bin",
+        "part-530.vertices.bin",
+        "part-531.vertices.bin",
+        "part-532.vertices.bin"
+      ],
+      "absoluteError": 8.05232421875,
+      "trianglesBefore": 149159,
+      "separateTriangles": 22370,
+      "mergedTriangles": 22373,
+      "verticesBefore": 256710,
+      "verticesAfterWeld": 256702,
+      "separateMaxError": 6.331331253051758,
+      "mergedError": 6.273334980010986
+    },
+    {
+      "family": 43,
+      "name": "!А - Терракота / !А - Терракота",
+      "parts": [
+        "part-138.vertices.bin",
+        "part-139.vertices.bin",
+        "part-140.vertices.bin",
+        "part-141.vertices.bin",
+        "part-142.vertices.bin",
+        "part-143.vertices.bin",
+        "part-144.vertices.bin",
+        "part-145.vertices.bin"
+      ],
+      "absoluteError": 11.620000000000001,
+      "trianglesBefore": 160000,
+      "separateTriangles": 151102,
+      "mergedTriangles": 150674,
+      "verticesBefore": 356977,
+      "verticesAfterWeld": 356977,
+      "separateMaxError": 11.570818901062012,
+      "mergedError": 11.536470413208008
+    },
+    {
+      "family": 43,
+      "name": "!А - Терракота / !А - Терракота",
+      "parts": [
+        "part-147.vertices.bin",
+        "part-148.vertices.bin",
+        "part-149.vertices.bin",
+        "part-150.vertices.bin",
+        "part-151.vertices.bin",
+        "part-152.vertices.bin",
+        "part-153.vertices.bin",
+        "part-154.vertices.bin"
+      ],
+      "absoluteError": 16.2575,
+      "trianglesBefore": 160000,
+      "separateTriangles": 74940,
+      "mergedTriangles": 69016,
+      "verticesBefore": 357217,
+      "verticesAfterWeld": 357160,
+      "separateMaxError": 16.252750396728516,
+      "mergedError": 16.19534683227539
+    },
+    {
+      "family": 43,
+      "name": "!А - Терракота / !А - Терракота",
+      "parts": [
+        "part-156.vertices.bin",
+        "part-157.vertices.bin",
+        "part-158.vertices.bin",
+        "part-159.vertices.bin",
+        "part-160.vertices.bin",
+        "part-161.vertices.bin",
+        "part-162.vertices.bin",
+        "part-163.vertices.bin"
+      ],
+      "absoluteError": 13.31465576171875,
+      "trianglesBefore": 157968,
+      "separateTriangles": 122042,
+      "mergedTriangles": 116542,
+      "verticesBefore": 357579,
+      "verticesAfterWeld": 357579,
+      "separateMaxError": 13.12279987335205,
+      "mergedError": 13.084224700927734
+    }
+  ],
+  "uvExperiment": {
+    "geometryBytes": 354926564,
+    "parts": 962,
+    "potentialVertexBytesSaved": 60775612,
+    "maxTexelBound": 18.7,
+    "overQuarterTexel": 610,
+    "overOneTexel": 223,
+    "thresholds": [
+      {
+        "maxTexelBound": 0,
+        "parts": 282,
+        "potentialVertexBytesSaved": 18090388
+      },
+      {
+        "maxTexelBound": 0.01,
+        "parts": 331,
+        "potentialVertexBytesSaved": 19067916
+      },
+      {
+        "maxTexelBound": 0.1,
+        "parts": 339,
+        "potentialVertexBytesSaved": 19157548
+      },
+      {
+        "maxTexelBound": 0.25,
+        "parts": 352,
+        "potentialVertexBytesSaved": 19229988
+      },
+      {
+        "maxTexelBound": 1,
+        "parts": 739,
+        "potentialVertexBytesSaved": 43744644
+      }
+    ],
+    "worstParts": [
+      {
+        "part": 342,
+        "family": 111,
+        "vertices": 10711,
+        "lo": [
+          -19998.376953125,
+          -19998.376953125
+        ],
+        "hi": [
+          27689.87109375,
+          27689.87109375
+        ],
+        "maxUVError": [
+          0.365234375,
+          0.365234375
+        ],
+        "maxTexelBound": 18.7,
+        "savedBytes": 42844,
+        "hasNormalMap": true
+      },
+      {
+        "part": 323,
+        "family": 107,
+        "vertices": 697,
+        "lo": [
+          -32652.984375,
+          -32652.984375
+        ],
+        "hi": [
+          25605.017578125,
+          25605.017578125
+        ],
+        "maxUVError": [
+          0.443359375,
+          0.443359375
+        ],
+        "maxTexelBound": 2.5244660293848757,
+        "savedBytes": 2788,
+        "hasNormalMap": true
+      },
+      {
+        "part": 814,
+        "family": 199,
+        "vertices": 762,
+        "lo": [
+          -30431.423828125,
+          -30431.423828125
+        ],
+        "hi": [
+          30431.423828125,
+          24866.421875
+        ],
+        "maxUVError": [
+          0.46484375,
+          0.41796875
+        ],
+        "maxTexelBound": 2.379893084970764,
+        "savedBytes": 3048,
+        "hasNormalMap": true
+      },
+      {
+        "part": 800,
+        "family": 191,
+        "vertices": 32476,
+        "lo": [
+          -46112.63671875,
+          -41643.9296875
+        ],
+        "hi": [
+          45311.99609375,
+          41643.9296875
+        ],
+        "maxUVError": [
+          0.699462890625,
+          0.63885498046875
+        ],
+        "maxTexelBound": 1.7906249599764124,
+        "savedBytes": 129904,
+        "hasNormalMap": true
+      },
+      {
+        "part": 429,
+        "family": 177,
+        "vertices": 15127,
+        "lo": [
+          -39908.12890625,
+          -39908.12890625
+        ],
+        "hi": [
+          49260.84765625,
+          49260.84765625
+        ],
+        "maxUVError": [
+          0.681640625,
+          0.6806640625
+        ],
+        "maxTexelBound": 1.745,
+        "savedBytes": 60508,
+        "hasNormalMap": true
+      }
+    ]
+  }
+}

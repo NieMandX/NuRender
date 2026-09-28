@@ -15,6 +15,7 @@ export class Renderer {
   source: 'procedural'|'blender'|'full' = 'procedural';
   private full?:FullScene;private fullTextures?:TextureAssets;
   private fullBatchLayout!:GPUBindGroupLayout;private fullPipelines!:GPURenderPipeline[];private fullBatchPipelines!:GPURenderPipeline[];
+  private fullBundles=new Map<string,{scene:FullScene;stamp:string;bundle:GPURenderBundle}>();
   private get activeReal(){return this.source==='full'?this.full:this.real;}
   private real?:RealScene; private realPipeline!:GPURenderPipeline; private realShadow!:GPURenderPipeline;
   private batchLayout!:GPUBindGroupLayout;private batchPipeline!:GPURenderPipeline;private batchShadow!:GPURenderPipeline;
@@ -43,6 +44,16 @@ export class Renderer {
   private partCount = 0; private groundCount = 0;
   private size = [0,0]; private timestampBusy = false;
   onError: (message:string)=>void = ()=>{};
+  onSceneChange=()=>{};
+  readonly geometryMode=(()=>{
+    const mode=new URL(location.href).searchParams.get('geometry')??import.meta.env?.VITE_DEFAULT_GEOMETRY??'legacy';
+    return mode==='paged'||mode==='stream'?mode:'legacy';
+  })();
+  get paged(){return this.geometryMode!=='legacy';}
+  get pagingInfo(){return this.full?.pagingInfo;}
+  get detailEnabled(){return this.full?.detailEnabled??true;}
+  set detailEnabled(value:boolean){if(this.full)this.full.detailEnabled=value;}
+  set streamingFrozen(value:boolean){if(this.full)this.full.streamingFrozen=value;}
   readonly profile=chooseProfile(new URL(location.href).searchParams.get('profile')??import.meta.env?.VITE_DEFAULT_PROFILE??null,navigator.maxTouchPoints,navigator.userAgent,matchMedia('(pointer:coarse)').matches);
   get mobile(){return this.profile==='mobile';}
   constructor(readonly canvas:HTMLCanvasElement) {if(this.mobile){this.count=16;this.mode='B';}}
@@ -160,12 +171,14 @@ export class Renderer {
   }
   async setSource(source:'procedural'|'blender'|'full',progress:(s:string)=>void=()=>{}){
     if(this.mobile&&source!==this.source){
+      this.fullBundles.clear();
       this.real?.destroy();this.real=undefined;this.realTextures?.destroy();this.realTextures=undefined;
       this.full?.destroy();this.full=undefined;this.fullTextures?.destroy();this.fullTextures=undefined;
       this.source='procedural';this.resetCamera();await this.device.queue.onSubmittedWorkDone();
     }
     if(source==='full'&&!this.full){
-      const scene=await FullScene.load(this.device,progress,this.mobile);
+      const scene=await FullScene.load(this.device,progress,this.mobile,this.mobile?(this.geometryMode==='stream'?'stream':this.paged):false);
+      scene.onPageChange=()=>{if(this.source==='full')this.onSceneChange();};
       try{const textures=await TextureAssets.create(this.device,this.textureLayout,scene.textures,this.mobile?MOBILE_ROOT:FULL_ROOT,this.mobile?256:512,progress);scene.createBatchBind(this.fullBatchLayout);this.full=scene;this.fullTextures=textures;}catch(e){scene.destroy();throw e;}
     }
     if(source==='blender'&&!this.real){
@@ -218,12 +231,12 @@ export class Renderer {
       transparencyTextureBytes:this.accumulation?this.canvas.width*this.canvas.height*9:0,drawCalls:draws[this.mode],drawCallsByMode:draws,coldDrawCallsByMode:coldDraws,shadowCache:this.shadowCacheInfo,width:this.canvas.width,height:this.canvas.height,renderedFrames:this.renderedFrames};
     if(this.source==='full'&&this.full){
       const scene=this.full,objects=scene.manifest.objects.length,draws={A:scene.drawCount('A',false),B:scene.drawCount('B',false),C:scene.drawCount('C',false)},cold={A:scene.drawCount('A'),B:scene.drawCount('B'),C:scene.drawCount('C')};
-      return {...procedural,instances:objects,instancesByMode:{A:objects,B:objects,C:objects},logicalParts:objects,triangles:scene.manifest.triangles,templateCount:scene.manifest.groups.length,uniqueResidualParts:0,
+      return {...procedural,instances:objects,instancesByMode:{A:objects,B:objects,C:objects},logicalParts:objects,triangles:scene.activeTriangles,templateCount:scene.manifest.groups.length,uniqueResidualParts:0,
         bytesA:scene.bytes,bytesB:scene.structuredBytes,bytesC:scene.bytes,residentSceneBuffers:procedural.residentSceneBuffers+scene.residentBytes+(this.real?.residentBytes??0),
         allocationBreakdown:scene.allocationBreakdown,commonGeometryBytes:scene.allocationBreakdown.commonVertices,cachedProceduralBytes:procedural.residentSceneBuffers,cachedRealSceneBytes:this.real?.residentBytes??0,
         materialTextureBytes:this.fullTextures!.bytes,cachedMaterialTextureBytes:this.realTextures?.bytes??0,realSceneCpuBufferBytes:scene.cpuBytes,cachedRealSceneCpuBufferBytes:this.real?.cpuBytes??0,
         rebuildCpuMs:scene.preparationMs,drawCalls:draws[this.mode],drawCallsByMode:draws,coldDrawCallsByMode:cold,batching:scene.batching,materialEdits:scene.materialEdits,sourceDigest:scene.materialIdentity.sourceDigest,transparencyPass:this.hasTransparency,
-        fullScene:true,culling:scene.cullingInfo,lod:scene.manifest.lod,fullBatches:scene.batches.length,fullParts:scene.manifest.groups.length,fullElements:scene.elementCount};
+        fullScene:true,culling:scene.cullingInfo,lod:scene.manifest.lod,paging:scene.pagingInfo,fullBatches:scene.batches.length,fullParts:scene.manifest.groups.length,fullElements:scene.elementCount};
     }
     if(this.source==='procedural'||!this.real)return {...procedural,residentSceneBuffers:procedural.residentSceneBuffers+(this.real?.residentBytes??0)+(this.full?.residentBytes??0),cachedRealSceneBytes:this.real?.residentBytes??0,cachedFullSceneBytes:this.full?.residentBytes??0,realSceneCpuBufferBytes:this.real?.cpuBytes??0,cachedFullSceneCpuBufferBytes:this.full?.cpuBytes??0,materialTextureBytes:0,cachedMaterialTextureBytes:(this.realTextures?.bytes??0)+(this.fullTextures?.bytes??0)};
     const objects=this.real.manifest.objects.length,groups=this.real.groups.length,bDraws=this.real.batching?this.real.batchDrawGroups:this.real.legacyDrawGroups;
@@ -252,7 +265,7 @@ export class Renderer {
     const {target,radius}=this.framing;
     const eye=[Math.sin(this.yaw)*Math.cos(this.pitch)*fittedDistance,Math.sin(this.pitch)*fittedDistance,Math.cos(this.yaw)*Math.cos(this.pitch)*fittedDistance].map((v,i)=>v+target[i]);
     const vp=mat4.multiply(mat4.perspective(.65,aspect,.5,10000),mat4.lookAt(eye,target,[0,1,0]));
-    if(this.source==='full')this.full?.prepareVisibility(this.culling?frustumPlanes(vp):null);
+    if(this.source==='full'){const planes=frustumPlanes(vp);this.full?.prepareVisibility(this.culling?planes:null);this.full?.prepareDetail(eye,target,this.size[1],planes);}
     const lightVP=mat4.multiply(mat4.ortho(-radius,radius,-radius,radius,1,radius*6),mat4.lookAt([-radius*1.8,radius*3,radius*1.2].map((v,i)=>v+target[i]),target,[0,1,0]));
     const uniforms=new Float32Array(44);uniforms.set(vp);uniforms.set(lightVP,16);uniforms.set([...eye,this.environmentRotation*Math.PI/180],32);uniforms.set([this.partCount,this.diagnostic,this.source!=='procedural'?this.textureMode:0,this.source!=='procedural'?this.environmentMode:0],36);
     uniforms.set([this.iblMode,0,0,0],40);
@@ -287,7 +300,15 @@ export class Renderer {
     return {sample,done};
   }
   private draw(pass:GPURenderPassEncoder, shadow:boolean,transparent=false){
-    if(this.source==='full'&&this.full){const layer=shadow?0:transparent?2:1;pass.setPipeline((this.mode==='B'&&this.full.batching&&!this.mobile?this.fullBatchPipelines:this.fullPipelines)[layer]);pass.setBindGroup(0,this.bindG);if(!shadow){pass.setBindGroup(1,this.lightBind);pass.setBindGroup(3,this.fullTextures!.bind);}this.full.draw(pass,this.mode,shadow?'shadow':transparent?'glass':'opaque');return;}
+    if(this.source==='full'&&this.full){
+      const layer=shadow?0:transparent?2:1;
+      const encode=(target:GPURenderPassEncoder|GPURenderBundleEncoder)=>{target.setPipeline((this.mode==='B'&&this.full!.batching&&!this.mobile?this.fullBatchPipelines:this.fullPipelines)[layer]);target.setBindGroup(0,this.bindG);if(!shadow){target.setBindGroup(1,this.lightBind);target.setBindGroup(3,this.fullTextures!.bind);}this.full!.draw(target,this.mode,shadow?'shadow':transparent?'glass':'opaque');};
+      if(this.mobile){
+        const key=`${this.mode}:${layer}`,stamp=`${this.sceneRevision}:${this.full.bundleStamp(shadow)}`;let cached=this.fullBundles.get(key);
+        if(!cached||cached.scene!==this.full||cached.stamp!==stamp){const encoder=this.device.createRenderBundleEncoder({colorFormats:shadow?[]:transparent?['rgba16float','r8unorm']:[this.format],depthStencilFormat:shadow?'depth32float':'depth24plus'});encode(encoder);cached={scene:this.full,stamp,bundle:encoder.finish()};this.fullBundles.set(key,cached);}
+        pass.executeBundles([cached.bundle]);
+      }else encode(pass);return;
+    }
     if(this.source==='blender'&&this.real){
       pass.setPipeline(shadow?this.realShadow:transparent?this.realTransparent:this.realPipeline);pass.setBindGroup(0,this.bindG);if(!shadow)pass.setBindGroup(3,this.realTextures!.bind);this.real.draw(pass,this.mode);
       if(this.mode==='B'&&this.real.batching){pass.setPipeline(shadow?this.batchShadow:transparent?this.batchTransparent:this.batchPipeline);pass.setBindGroup(0,this.bindG);if(!shadow){pass.setBindGroup(1,this.lightBind);pass.setBindGroup(3,this.realTextures!.bind);}this.real.drawBatch(pass);}return;
@@ -320,5 +341,5 @@ export class Renderer {
       const mapped=new Uint8Array(buffer.getMappedRange()), data=new Uint8Array(width*height*4);for(let y=0;y<height;y++)data.set(mapped.subarray(y*row,y*row+width*4),y*width*4);return data;
     } finally {if(buffer.mapState==='mapped')buffer.unmap();buffer.destroy();}
   }
-  destroy(){this.stopped=true;this.full?.destroy();this.fullTextures?.destroy();this.real?.destroy();this.realTextures?.destroy();this.environment?.destroy();this.prefiltered?.destroy();this.fallbackTextures?.destroy();this.depth?.destroy();this.accumulation?.destroy();this.revealage?.destroy();this.shadow?.destroy();this.queries?.destroy();this.device?.destroy();}
+  destroy(){this.stopped=true;this.fullBundles.clear();this.full?.destroy();this.fullTextures?.destroy();this.real?.destroy();this.realTextures?.destroy();this.environment?.destroy();this.prefiltered?.destroy();this.fallbackTextures?.destroy();this.depth?.destroy();this.accumulation?.destroy();this.revealage?.destroy();this.shadow?.destroy();this.queries?.destroy();this.device?.destroy();}
 }
