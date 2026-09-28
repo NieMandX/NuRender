@@ -7,6 +7,11 @@
 `https://storage.yandexcloud.net/maragojeep/nurender/assets/v0.14.0/`.
 Это публичная конфигурация, не секрет.
 
+28.09.2026 опубликованы [репозиторий](https://github.com/NieMandX/NuRender) и
+[сайт 0.14](https://niemandx.github.io/NuRender/). В Storage проверены наличие и размер
+всех 15 744 объектов, включая manifest; анонимные GET, CORS, gzip и SHA-256 —
+для manifest, всех пяти scene.json, обзорного пакета, подробного участка, текстуры и окружения.
+
 ## Сборка приложения
 
 ```sh
@@ -25,6 +30,7 @@ npm run preview:pages
 
 Workflow `.github/workflows/pages.yml` публикует `dist/` при push в `main`.
 Для нового репозитория `NieMandX/NuRender` требуется выбрать **Settings → Pages → GitHub Actions**.
+Для опубликованного репозитория эта настройка уже включена.
 Если имя репозитория меняется, обновить `base` в `vite.config.ts` и проверку пути.
 
 `npm run test:unit` не требует моделей: проверки локальных файлов и их интеграционные группы

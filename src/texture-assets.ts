@@ -1,6 +1,7 @@
 import {fetchAsset as fetch} from './asset-fetch';
 import {assetUrl} from './asset-url';
 import {sourceDigest} from './structured-real';
+import {orderedLoad} from './ordered-load';
 export type TextureMap={image:number;matrix:number[];uv:string;channel:number;srgb:boolean;strength:number};
 export type SourceMaterial={name:string;roughness:number;metallic:number;maps:Partial<Record<'color'|'roughness'|'metallic'|'normal',TextureMap>>};
 export type TextureManifest={version:1;sourceDigest:string;groups:{name:string;file:string;corners:number;uvLayer:string;sha256:string}[];images:{file:string;sha256:string;width:number;height:number}[];materials:SourceMaterial[];warnings:{material:string;role:string;reason:string;object?:string}[]};
@@ -51,10 +52,14 @@ export class TextureAssets{
     const table=device.createBuffer({label:'Imported PBR material table',size:data.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(table,0,data);
     try{
       if(!slots.length)device.queue.writeTexture({texture},new Uint8Array([255,255,255,255]),{bytesPerRow:4},[1,1]);
-      for(const [index,slot] of slots.entries()){
-        progress(`Текстуры: ${index+1}/${slots.length}`);
-        const meta=manifest!.images[slot.image],r=await fetch(root+meta.file);if(!r.ok)throw new Error('Не удалось прочитать '+meta.file);
+      if(slots.length)progress(`Текстуры: 0/${slots.length}`);
+      // Overlap network latency while decoding and uploading only one image at a time.
+      const images=orderedLoad(slots,4,async(slot,index,signal)=>{
+        const meta=manifest!.images[slot.image],r=await fetch(root+meta.file,{signal});if(!r.ok)throw new Error('Не удалось прочитать '+meta.file);
         const bytes=await r.arrayBuffer();if(await sourceDigest([new Uint8Array(bytes)])!==meta.sha256)throw new Error('Повреждена текстура '+meta.file);
+        return {index,slot,meta,bytes};
+      });
+      for await(const {index,slot,meta,bytes} of images){
         const bitmap=await createImageBitmap(new Blob([bytes]),{colorSpaceConversion:'none',premultiplyAlpha:'none'});
         try{
           if(bitmap.width!==meta.width||bitmap.height!==meta.height||size>meta.width)throw new Error('Неверный размер текстуры');
@@ -66,6 +71,7 @@ export class TextureAssets{
             }finally{staging.destroy();}
           }
         }finally{bitmap.close();}
+        progress(`Текстуры: ${index+1}/${slots.length}`);
       }
       if(slots.length)await generateMips(device,texture,slots.map(s=>s.srgb),levels);
       const bytes=Array.from({length:levels},(_,l)=>(size>>l)**2*4*Math.max(1,slots.length)).reduce((a,b)=>a+b,0)+table.size;

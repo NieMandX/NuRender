@@ -15,6 +15,8 @@
 Веб-версия: [NuRender на GitHub Pages](https://niemandx.github.io/NuRender/).
 Код: [NieMandX/NuRender](https://github.com/NieMandX/NuRender).
 Модели и текстуры загружаются из Яндекс Object Storage. Настройка — [hosting.md](docs/hosting.md).
+Загрузка текстур перекрывает до четырёх сетевых запросов; декодирование и загрузка
+в GPU выполняются по одной картинке, с проверкой SHA-256 и отменой запросов при ошибке.
 Исследование свежих алгоритмов и следующий шаг — [обзор 2023–2026](docs/rendering-research-2026-09-28.md).
 Дополнение: [статьи SIGGRAPH 2026, сентябрьский TexF и проверка гипотез на M8](docs/frontier-research-2026-09-28.md).
 
