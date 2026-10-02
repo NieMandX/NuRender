@@ -6,8 +6,8 @@ import {FullScene,FULL_ROOT,MOBILE_ROOT} from './full-scene';
 import {HDREnvironment,HDR_SOURCE} from './hdr-environment';
 import {TextureAssets} from './texture-assets';
 import { mat4 } from 'wgpu-matrix';
-import shader from './shader.wgsl?raw';
-import transparencyShader from './transparency.wgsl?raw';
+import {PipelineCompiler} from './pipeline-compiler';
+import {sceneShaderSource} from './shader-source';
 import { sceneGroups, commonParts, concat, mergedMesh, expand, packTemplate, packBuildings, cube, MODES, type Detail, type Mode } from './scene';
 import {decodePassTimestamps,type Sample,type PassName} from './stats';
 import { RealScene } from './real-scene';
@@ -61,6 +61,8 @@ export class Renderer {
   readonly profile=chooseProfile(new URL(location.href).searchParams.get('profile')??import.meta.env?.VITE_DEFAULT_PROFILE??null,navigator.maxTouchPoints,navigator.userAgent,matchMedia('(pointer:coarse)').matches);
   get mobile(){return this.profile==='mobile';}
   constructor(readonly canvas:HTMLCanvasElement) {if(this.mobile){this.count=16;this.mode='B';}}
+  private compiler?:PipelineCompiler;
+  get shaderDiagnostics(){return this.compiler?.diagnostics??[];}
   async init() {
     if (!navigator.gpu) throw new Error(!isSecureContext?'WebGPU требует HTTPS. На телефоне откройте защищённый адрес сайта.':'WebGPU недоступен. Нужен браузер с поддержкой WebGPU (например, Safari 26 или совместимый Chrome).');
     const adapter = await navigator.gpu.requestAdapter();
@@ -96,50 +98,45 @@ export class Renderer {
     this.shadow=this.device.createTexture({size:this.mobile?[1024,1024]:[2048,2048],format:'depth32float',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.TEXTURE_BINDING});
     this.environment=await HDREnvironment.create(this.device);this.prefiltered=await PrefilteredIBL.create(this.device);
     this.lightBind=this.device.createBindGroup({layout:lightLayout,entries:[{binding:0,resource:this.shadow.createView()},{binding:1,resource:this.device.createSampler({compare:'less-equal',magFilter:'linear',minFilter:'linear'})},{binding:2,resource:this.environment.texture.createView()},{binding:3,resource:this.environment.sampler},{binding:4,resource:{buffer:this.environment.sh}},{binding:5,resource:this.prefiltered.texture.createView({dimension:'cube'})},{binding:6,resource:this.prefiltered.lut.createView()},{binding:7,resource:this.prefiltered.sampler}]});
-    const module=this.device.createShaderModule({code:shader});
-    const errors=(await module.getCompilationInfo()).messages.filter(m=>m.type==='error');
-    if(errors.length) throw new Error(errors.map(m=>`${m.lineNum}: ${m.message}`).join('\n'));
+    const compiler=this.compiler=new PipelineCompiler(this.device,sceneShaderSource);
     const buffers: GPUVertexBufferLayout[]=[{arrayStride:24,attributes:[{shaderLocation:0,offset:0,format:'float32x3'},{shaderLocation:1,offset:12,format:'float32x3'}]}];
     this.textureLayout=TextureAssets.layout(this.device);this.fallbackTextures=await TextureAssets.create(this.device,this.textureLayout);
     const emptyLayout=this.device.createBindGroupLayout({entries:[]});
     const pipelineLayout=this.device.createPipelineLayout({bindGroupLayouts:[this.layout,lightLayout,emptyLayout,this.textureLayout]});
     const shadowLayout=this.device.createPipelineLayout({bindGroupLayouts:[this.layout]});
     this.pipelines={} as Record<Mode,GPURenderPipeline>;this.shadows={} as Record<Mode,GPURenderPipeline>;
-    this.device.pushErrorScope('validation');
     const meshBuffers: GPUVertexBufferLayout[]=[
       {arrayStride:40,attributes:[{shaderLocation:0,offset:0,format:'float32x3'},{shaderLocation:1,offset:12,format:'float32x3'},{shaderLocation:2,offset:24,format:'float32x4'}]},
       {arrayStride:32,stepMode:'instance',attributes:[{shaderLocation:3,offset:0,format:'float32x4'},{shaderLocation:4,offset:16,format:'float32x4'}]},
     ];
     for(const mode of MODES) {
-      const constants={STRUCTURED:mode==='B'?1:0};
-      this.pipelines[mode]=await this.device.createRenderPipelineAsync({layout:pipelineLayout,vertex:{module,entryPoint:mode==='C'?'vsMerged':'vs',buffers:mode==='C'?meshBuffers:buffers,constants},fragment:{module,entryPoint:'fs',targets:[{format:this.format}]},primitive:{cullMode:'back'},depthStencil:{format:'depth24plus',depthWriteEnabled:true,depthCompare:'less'}});
-      this.shadows[mode]=await this.device.createRenderPipelineAsync({layout:shadowLayout,vertex:{module,entryPoint:mode==='C'?'shadowMerged':'shadowVS',buffers:mode==='C'?meshBuffers:buffers,constants},primitive:{cullMode:'back'},depthStencil:{format:'depth32float',depthWriteEnabled:true,depthCompare:'less',depthBias:2,depthBiasSlopeScale:2}});
+      const structured=mode==='B';
+      this.pipelines[mode]=await compiler.create({layout:pipelineLayout,vertex:{entryPoint:mode==='C'?'vsMerged':'vs',buffers:mode==='C'?meshBuffers:buffers,structured},fragment:{entryPoint:'fs',targets:[{format:this.format}]},primitive:{cullMode:'back'},depthStencil:{format:'depth24plus',depthWriteEnabled:true,depthCompare:'less'}});
+      this.shadows[mode]=await compiler.create({layout:shadowLayout,vertex:{entryPoint:mode==='C'?'shadowMerged':'shadowVS',buffers:mode==='C'?meshBuffers:buffers,structured},primitive:{cullMode:'back'},depthStencil:{format:'depth32float',depthWriteEnabled:true,depthCompare:'less',depthBias:2,depthBiasSlopeScale:2}});
     }
     const realBuffers:GPUVertexBufferLayout[]=[meshBuffers[0],{arrayStride:112,stepMode:'instance',attributes:Array.from({length:7},(_,i)=>({shaderLocation:i+3,offset:i*16,format:'float32x4' as const}))},{arrayStride:16,attributes:[{shaderLocation:10,offset:0,format:'float32x4'}]}];
-    this.realPipeline=await this.device.createRenderPipelineAsync({layout:pipelineLayout,vertex:{module,entryPoint:'vsReal',buffers:realBuffers},fragment:{module,entryPoint:'fs',targets:[{format:this.format}]},primitive:{cullMode:'none'},depthStencil:{format:'depth24plus',depthWriteEnabled:true,depthCompare:'less'}});
-    this.realShadow=await this.device.createRenderPipelineAsync({layout:shadowLayout,vertex:{module,entryPoint:'shadowReal',buffers:realBuffers},fragment:{module,entryPoint:'shadowMask',targets:[]},primitive:{cullMode:'none'},depthStencil:{format:'depth32float',depthWriteEnabled:true,depthCompare:'less',depthBias:2,depthBiasSlopeScale:2}});
+    this.realPipeline=await compiler.create({layout:pipelineLayout,vertex:{entryPoint:'vsReal',buffers:realBuffers},fragment:{entryPoint:'fs',targets:[{format:this.format}]},primitive:{cullMode:'none'},depthStencil:{format:'depth24plus',depthWriteEnabled:true,depthCompare:'less'}});
+    this.realShadow=await compiler.create({layout:shadowLayout,vertex:{entryPoint:'shadowReal',buffers:realBuffers},fragment:{entryPoint:'shadowMask',targets:[]},primitive:{cullMode:'none'},depthStencil:{format:'depth32float',depthWriteEnabled:true,depthCompare:'less',depthBias:2,depthBiasSlopeScale:2}});
     this.batchLayout=this.device.createBindGroupLayout({entries:[0,1,2,3,4].map(binding=>({binding,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage' as const}}))});
-    this.batchPipeline=await this.device.createRenderPipelineAsync({layout:this.device.createPipelineLayout({bindGroupLayouts:[this.layout,lightLayout,this.batchLayout,this.textureLayout]}),vertex:{module,entryPoint:'vsBatch'},fragment:{module,entryPoint:'fs',targets:[{format:this.format}]},primitive:{cullMode:'none'},depthStencil:{format:'depth24plus',depthWriteEnabled:true,depthCompare:'less'}});
-    this.batchShadow=await this.device.createRenderPipelineAsync({layout:this.device.createPipelineLayout({bindGroupLayouts:[this.layout,this.device.createBindGroupLayout({entries:[]}),this.batchLayout]}),vertex:{module,entryPoint:'shadowBatch'},fragment:{module,entryPoint:'shadowMask',targets:[]},primitive:{cullMode:'none'},depthStencil:{format:'depth32float',depthWriteEnabled:true,depthCompare:'less',depthBias:2,depthBiasSlopeScale:2}});
+    this.batchPipeline=await compiler.create({layout:this.device.createPipelineLayout({bindGroupLayouts:[this.layout,lightLayout,this.batchLayout,this.textureLayout]}),vertex:{entryPoint:'vsBatch'},fragment:{entryPoint:'fs',targets:[{format:this.format}]},primitive:{cullMode:'none'},depthStencil:{format:'depth24plus',depthWriteEnabled:true,depthCompare:'less'}});
+    this.batchShadow=await compiler.create({layout:this.device.createPipelineLayout({bindGroupLayouts:[this.layout,this.device.createBindGroupLayout({entries:[]}),this.batchLayout]}),vertex:{entryPoint:'shadowBatch'},fragment:{entryPoint:'shadowMask',targets:[]},primitive:{cullMode:'none'},depthStencil:{format:'depth32float',depthWriteEnabled:true,depthCompare:'less',depthBias:2,depthBiasSlopeScale:2}});
     const targets:GPUColorTargetState[]=[
       {format:'rgba16float',blend:{color:{srcFactor:'one',dstFactor:'one'},alpha:{srcFactor:'one',dstFactor:'one'}}},
       {format:'r8unorm',blend:{color:{srcFactor:'zero',dstFactor:'one-minus-src'},alpha:{srcFactor:'zero',dstFactor:'one'}}},
     ];
-    this.realTransparent=await this.device.createRenderPipelineAsync({layout:pipelineLayout,vertex:{module,entryPoint:'vsReal',buffers:realBuffers},fragment:{module,entryPoint:'fsTransparent',targets},primitive:{cullMode:'none'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less'}});
-    this.batchTransparent=await this.device.createRenderPipelineAsync({layout:this.device.createPipelineLayout({bindGroupLayouts:[this.layout,lightLayout,this.batchLayout,this.textureLayout]}),vertex:{module,entryPoint:'vsBatch'},fragment:{module,entryPoint:'fsTransparent',targets},primitive:{cullMode:'none'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less'}});
+    this.realTransparent=await compiler.create({layout:pipelineLayout,vertex:{entryPoint:'vsReal',buffers:realBuffers},fragment:{entryPoint:'fsTransparent',targets},primitive:{cullMode:'none'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less'}});
+    this.batchTransparent=await compiler.create({layout:this.device.createPipelineLayout({bindGroupLayouts:[this.layout,lightLayout,this.batchLayout,this.textureLayout]}),vertex:{entryPoint:'vsBatch'},fragment:{entryPoint:'fsTransparent',targets},primitive:{cullMode:'none'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less'}});
     this.fullBatchLayout=this.device.createBindGroupLayout({entries:[0,1].map(binding=>({binding,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage' as const}}))});
     const fullBuffers:GPUVertexBufferLayout[]=[{arrayStride:32,attributes:[{shaderLocation:0,offset:0,format:'float32x3'},{shaderLocation:1,offset:12,format:'float32x3'},{shaderLocation:2,offset:24,format:'float32x2'}]},{arrayStride:144,stepMode:'instance',attributes:Array.from({length:9},(_,i)=>({shaderLocation:i+3,offset:i*16,format:'float32x4' as const}))}];
     if(this.mobile)fullBuffers[0]={arrayStride:20,attributes:[{shaderLocation:0,offset:0,format:'unorm16x4'},{shaderLocation:1,offset:8,format:'snorm8x4'},{shaderLocation:2,offset:12,format:'float32x2'}]};
     this.fullPipelines=[];this.fullBatchPipelines=[];
     for(const batched of [false,true])for(let layer=0;layer<3;layer++){
       const isShadow=layer===0,layout=isShadow?this.device.createPipelineLayout({bindGroupLayouts:batched?[this.layout,emptyLayout,this.fullBatchLayout]:[this.layout]}):this.device.createPipelineLayout({bindGroupLayouts:[this.layout,lightLayout,batched?this.fullBatchLayout:emptyLayout,this.textureLayout]});
-      const pipeline=await this.device.createRenderPipelineAsync({layout,vertex:{module,entryPoint:isShadow?(batched?'shadowFullBatch':this.mobile?'shadowMobile':'shadowFull'):(batched?'vsFullBatch':this.mobile?'vsMobile':'vsFull'),buffers:batched?[]:fullBuffers},fragment:{module,entryPoint:isShadow?'shadowMask':layer===2?'fsTransparent':'fs',targets:isShadow?[]:layer===2?targets:[{format:this.format}]},primitive:{cullMode:'none'},depthStencil:{format:isShadow?'depth32float':'depth24plus',depthWriteEnabled:layer!==2,depthCompare:'less',...(isShadow?{depthBias:2,depthBiasSlopeScale:2}:{})}});
+      const pipeline=await compiler.create({layout,vertex:{entryPoint:isShadow?(batched?'shadowFullBatch':this.mobile?'shadowMobile':'shadowFull'):(batched?'vsFullBatch':this.mobile?'vsMobile':'vsFull'),buffers:batched?[]:fullBuffers},fragment:{entryPoint:isShadow?'shadowMask':layer===2?'fsTransparent':'fs',targets:isShadow?[]:layer===2?targets:[{format:this.format}]},primitive:{cullMode:'none'},depthStencil:{format:isShadow?'depth32float':'depth24plus',depthWriteEnabled:layer!==2,depthCompare:'less',...(isShadow?{depthBias:2,depthBiasSlopeScale:2}:{})}});
       (batched?this.fullBatchPipelines:this.fullPipelines).push(pipeline);
     }
     this.compositeLayout=this.device.createBindGroupLayout({entries:[0,1].map(binding=>({binding,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'unfilterable-float' as const}}))});
-    const composite=this.device.createShaderModule({code:transparencyShader});
-    this.compositePipeline=await this.device.createRenderPipelineAsync({layout:this.device.createPipelineLayout({bindGroupLayouts:[this.compositeLayout]}),vertex:{module:composite,entryPoint:'vs'},fragment:{module:composite,entryPoint:'fs',targets:[{format:this.format,blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha'}}}]}});
-    const err=await this.device.popErrorScope();if(err)throw new Error(err.message);
+    this.compositePipeline=await compiler.create({layout:this.device.createPipelineLayout({bindGroupLayouts:[this.compositeLayout]}),vertex:{entryPoint:'compositeVS'},fragment:{entryPoint:'compositeFS',targets:[{format:this.format,blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha'}}}]}});
     if(this.hasTimestamps) {
       this.queries=this.device.createQuerySet({type:'timestamp',count:8});
       this.resolve=this.device.createBuffer({size:64,usage:GPUBufferUsage.QUERY_RESOLVE|GPUBufferUsage.COPY_SRC});

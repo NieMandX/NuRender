@@ -1,9 +1,3 @@
-struct Uniforms { vp: mat4x4f, lightVP: mat4x4f, camera: vec4f, settings: vec4f, lighting:vec4f }
-struct Part { position: vec4f, size: vec4f, color: vec4f }
-struct Building { origin: vec4f, color: vec4f }
-@group(0) @binding(0) var<uniform> u: Uniforms;
-@group(0) @binding(1) var<storage,read> parts: array<Part>;
-@group(0) @binding(2) var<storage,read> buildings: array<Building>;
 @group(1) @binding(0) var shadow: texture_depth_2d;
 @group(1) @binding(1) var shadowSampler: sampler_comparison;
 @group(1) @binding(2) var hdrEnvironment:texture_2d<f32>;
@@ -12,36 +6,6 @@ struct Building { origin: vec4f, color: vec4f }
 @group(1) @binding(5) var prefilteredEnvironment:texture_cube<f32>;
 @group(1) @binding(6) var brdfLut:texture_2d<f32>;
 @group(1) @binding(7) var prefilteredSampler:sampler;
-override STRUCTURED: bool = false;
-struct VertexInput { @location(0) position: vec3f, @location(1) normal: vec3f, @builtin(instance_index) instance: u32 }
-struct Output { @builtin(position) @invariant position: vec4f, @location(0) normal: vec3f, @location(1) color: vec3f, @location(2) world: vec3f, @location(3) light: vec4f, @location(4) emission: vec3f, @location(5) pbr: vec3f, @location(6) @interpolate(flat) kind:f32, @location(7) uv:vec2f, @location(8) @interpolate(flat) sourceMaterial:u32 }
-fn resolvePart(id: u32) -> Part {
-  if (STRUCTURED) {
-    let count = arrayLength(&parts);
-    let b = buildings[id / count];
-    var p = parts[id % count];
-    p.color = select(p.color, b.color, p.position.w > 0.5);
-    p.position = vec4f(p.position.xyz * vec3f(1,b.origin.w,1) + b.origin.xyz, 0);
-    p.size = vec4f(p.size.xyz * vec3f(1,b.origin.w,1),0);
-    return p;
-  }
-  return parts[id];
-}
-@vertex fn vs(input: VertexInput) -> Output {
-  let p = resolvePart(input.instance);
-  let world = input.position * p.size.xyz + p.position.xyz;
-  var out: Output;
-  out.position = u.vp * vec4f(world,1);
-  out.normal = input.normal;
-  out.color = p.color.xyz;
-  out.world = world;
-  out.light = u.lightVP * vec4f(world + input.normal * 0.05, 1);
-  return out;
-}
-@vertex fn shadowVS(input: VertexInput) -> @builtin(position) @invariant vec4f {
-  let p = resolvePart(input.instance);
-  return u.lightVP * vec4f(input.position * p.size.xyz + p.position.xyz,1);
-}
 // GGX / Smith / Schlick metallic-roughness. Environment is procedural,
 // sampled with 16 fixed GGX importance samples; diffuse is a sky approximation.
 fn fresnel(c:f32,f0:vec3f)->vec3f{return f0+(vec3f(1)-f0)*pow(1-clamp(c,0,1),5);}
@@ -179,93 +143,4 @@ struct TransparentOutput { @location(0) accumulation:vec4f, @location(1) reveala
   out.revealage=a;return out;
 }
 
-// C consumes a conventional baked building mesh with per-instance attributes.
-struct MergedInput {
-  @location(0) position: vec3f, @location(1) normal: vec3f,
-  @location(2) color: vec4f, @location(3) origin: vec4f, @location(4) tint: vec4f
-}
-@vertex fn vsMerged(input: MergedInput) -> Output {
-  let world = input.position * vec3f(1,input.origin.w,1) + input.origin.xyz;
-  var out: Output;
-  out.position = u.vp * vec4f(world,1);
-  out.normal = input.normal;
-  out.color = select(input.color.xyz, input.tint.xyz, input.color.w > 0.5);
-  out.world = world;
-  out.light = u.lightVP * vec4f(world + input.normal * 0.05,1);
-  return out;
-}
-@vertex fn shadowMerged(input: MergedInput) -> @builtin(position) @invariant vec4f {
-  return u.lightVP * vec4f(input.position * vec3f(1,input.origin.w,1) + input.origin.xyz,1);
-}
-struct RealInput {
-  @location(0) position:vec3f, @location(1) normal:vec3f, @location(2) color:vec4f,
-  @location(3) m0:vec4f, @location(4) m1:vec4f, @location(5) m2:vec4f, @location(6) m3:vec4f,
-  @location(7) n0:vec4f, @location(8) n1:vec4f, @location(9) n2:vec4f, @location(10) textureInfo:vec4f
-}
-@vertex fn vsReal(input:RealInput)->Output {
-  let world=mat4x4f(input.m0,input.m1,input.m2,input.m3)*vec4f(input.position,1);
-  let normal=normalize(mat3x3f(input.n0.xyz,input.n1.xyz,input.n2.xyz)*input.normal);
-  var out:Output;
-  out.position=u.vp*world;out.normal=normal;out.color=input.color.xyz;out.world=world.xyz;out.kind=input.color.w;out.uv=input.textureInfo.xy;out.sourceMaterial=u32(input.textureInfo.z);
-  out.light=u.lightVP*vec4f(world.xyz+normal*.05,1);return out;
-}
-struct ShadowOutput { @builtin(position) @invariant position:vec4f, @location(0) @interpolate(flat) kind:f32 }
-@vertex fn shadowReal(input:RealInput)->ShadowOutput {
-  var out:ShadowOutput;out.position=u.lightVP*mat4x4f(input.m0,input.m1,input.m2,input.m3)*vec4f(input.position,1);out.kind=input.color.w;return out;
-}
 @fragment fn shadowMask(input:ShadowOutput) { if(input.kind==1&&u.settings.y==0){discard;} }
-
-// B batch: 16 bits template-vertex address + 16 bits element-table address.
-struct Element { m:mat4x4f, n0:vec4f, n1:vec4f, n2:vec4f, ids:vec4u }
-@group(2) @binding(0) var<storage,read> batchVertices:array<f32>;
-@group(2) @binding(1) var<storage,read> elements:array<Element>;
-@group(2) @binding(2) var<storage,read> materials:array<vec4f>;
-@group(2) @binding(3) var<storage,read> batchTexcoords:array<vec4f>;
-@group(2) @binding(4) var<storage,read> batchTexcoordOffsets:array<vec2u>;
-fn batchPosition(v:u32)->vec3f{return vec3f(batchVertices[v],batchVertices[v+1],batchVertices[v+2]);}
-@vertex fn vsBatch(@builtin(vertex_index) address:u32)->Output {
-  let v=(address & 65535u)*10u;let e=elements[address>>16u];
-  let world=e.m*vec4f(batchPosition(v),1);
-  let normal=normalize(mat3x3f(e.n0.xyz,e.n1.xyz,e.n2.xyz)*batchPosition(v+3u));
-  var out:Output;out.position=u.vp*world;out.normal=normal;out.world=world.xyz;
-  out.light=u.lightVP*vec4f(world.xyz+normal*.05,1);
-  out.color=batchPosition(v+6u);out.kind=batchVertices[v+9u];
-  let offsets=batchTexcoordOffsets[address>>16u];let textureInfo=batchTexcoords[offsets.x+(address&65535u)-offsets.y];out.uv=textureInfo.xy;out.sourceMaterial=u32(textureInfo.z);
-  if(u.settings.y==0.0){let mat=materials[e.ids.y*2u];out.color=mix(out.color,mat.xyz,mat.w);let props=materials[e.ids.y*2u+1u];out.emission=mat.xyz*props.x;out.pbr=vec3f(props.y,props.z,mat.w);if(mat.w>.5){out.kind=0.0;}}
-  return out;
-}
-@vertex fn shadowBatch(@builtin(vertex_index) address:u32)->ShadowOutput {
-  let e=elements[address>>16u];let v=(address&65535u)*10u;
-  var out:ShadowOutput;out.position=u.lightVP*e.m*vec4f(batchPosition(v),1);out.kind=select(batchVertices[v+9u],0.0,e.ids.y!=0u);return out;
-}
-
-// Full-scene batches share compact position/normal/UV buffers across A/B/C.
-struct FullElement { m:mat4x4f, n0:vec4f, n1:vec4f, n2:vec4f, color:vec4f, props:vec4f }
-struct FullInput {
-  @location(0) position:vec3f, @location(1) normal:vec3f, @location(2) uv:vec2f,
-  @location(3) m0:vec4f, @location(4) m1:vec4f, @location(5) m2:vec4f, @location(6) m3:vec4f,
-  @location(7) n0:vec4f, @location(8) n1:vec4f, @location(9) n2:vec4f, @location(10) color:vec4f, @location(11) props:vec4f
-}
-@group(2) @binding(1) var<storage,read> fullElements:array<FullElement>;
-fn fullOutput(position:vec3f,normal:vec3f,uv:vec2f,e:FullElement)->Output {
-  let world=e.m*vec4f(position,1);let n=normalize(mat3x3f(e.n0.xyz,e.n1.xyz,e.n2.xyz)*normal);
-  var out:Output;out.position=u.vp*world;out.normal=n;out.world=world.xyz;out.color=e.color.rgb;out.kind=e.n0.w;
-  out.uv=uv;out.sourceMaterial=u32(e.n1.w);out.light=u.lightVP*vec4f(world.xyz+n*.05,1);
-  out.pbr=vec3f(e.props.y,e.props.z,e.props.w);out.emission=e.color.rgb*e.props.x;return out;
-}
-@vertex fn vsFull(input:FullInput)->Output {return fullOutput(input.position,input.normal,input.uv,FullElement(mat4x4f(input.m0,input.m1,input.m2,input.m3),input.n0,input.n1,input.n2,input.color,input.props));}
-@vertex fn shadowFull(input:FullInput)->ShadowOutput {var out:ShadowOutput;out.position=u.lightVP*mat4x4f(input.m0,input.m1,input.m2,input.m3)*vec4f(input.position,1);out.kind=input.n0.w;return out;}
-struct MobileInput {
-  @location(0) position:vec4f, @location(1) normal:vec4f, @location(2) uv:vec2f,
-  @location(3) m0:vec4f, @location(4) m1:vec4f, @location(5) m2:vec4f, @location(6) m3:vec4f,
-  @location(7) n0:vec4f, @location(8) n1:vec4f, @location(9) n2:vec4f, @location(10) color:vec4f, @location(11) props:vec4f
-}
-@vertex fn vsMobile(input:MobileInput)->Output {return fullOutput(input.position.xyz,input.normal.xyz,input.uv,FullElement(mat4x4f(input.m0,input.m1,input.m2,input.m3),input.n0,input.n1,input.n2,input.color,input.props));}
-@vertex fn shadowMobile(input:MobileInput)->ShadowOutput {var out:ShadowOutput;out.position=u.lightVP*mat4x4f(input.m0,input.m1,input.m2,input.m3)*vec4f(input.position.xyz,1);out.kind=input.n0.w;return out;}
-@vertex fn vsFullBatch(@builtin(vertex_index) address:u32)->Output {
-  let at=(address&65535u)*8u;let e=fullElements[address>>16u];
-  return fullOutput(batchPosition(at),batchPosition(at+3u),vec2f(batchVertices[at+6u],batchVertices[at+7u]),e);
-}
-@vertex fn shadowFullBatch(@builtin(vertex_index) address:u32)->ShadowOutput {
-  let at=(address&65535u)*8u;let e=fullElements[address>>16u];var out:ShadowOutput;out.position=u.lightVP*e.m*vec4f(batchPosition(at),1);out.kind=e.n0.w;return out;
-}
